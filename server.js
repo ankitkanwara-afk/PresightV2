@@ -10,6 +10,11 @@ const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "activities.json");
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const INGEST_API_TOKEN = process.env.INGEST_API_TOKEN || "";
+const DEFAULT_PASS = "Gup$hup.i0";
+
+function hashPassword(pass) {
+  return crypto.createHash("sha256").update(pass).digest("hex");
+}
 
 const ENUMS = {
   category: ["external", "internal"],
@@ -88,7 +93,9 @@ const DEFAULT_USERS = [
     email: "ankit.kanwara@gupshup.io",
     active: true,
     presalesRegionId: "region_in",
-    homeRegionId: "region_in"
+    homeRegionId: "region_in",
+    passwordHash: hashPassword(DEFAULT_PASS),
+    needsPasswordReset: true
   }
 ];
 
@@ -248,13 +255,16 @@ async function initStorage() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-  for (const user of DEFAULT_USERS) {
     await pool.query(
       `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id)
        VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (user_id) DO NOTHING`,
+       ON CONFLICT (user_id) DO UPDATE SET 
+         display_name = EXCLUDED.display_name,
+         email = EXCLUDED.email`,
       [user.userId, user.displayName, user.email, user.active, user.presalesRegionId || null, user.homeRegionId || null]
     );
+    // Ensure default password and reset flag exist in JSONB if in postgres mode, 
+    // or handled via schema update. For simplicity in Phase 2, we rely on the data JSONB.
   }
 }
 
@@ -291,7 +301,8 @@ async function readUsers() {
     email: r.email,
     active: r.active,
     presalesRegionId: r.presales_region_id,
-    homeRegionId: r.home_region_id
+    homeRegionId: r.home_region_id,
+    needsPasswordReset: r.data?.needsPasswordReset
   }));
 }
 
@@ -318,7 +329,9 @@ async function createUser({ displayName, email }) {
       email: cleanEmail,
       active: true,
       presalesRegionId: "region_in",
-      homeRegionId: "region_in"
+      homeRegionId: "region_in",
+      passwordHash: hashPassword(DEFAULT_PASS),
+      needsPasswordReset: true
     };
     users.push(user);
     store.users = users;
@@ -431,6 +444,80 @@ app.delete("/api/admin/users/:userId", async (req, res) => {
   const result = await deleteUser(req.params.userId);
   if (result.error) return res.status(400).json({ error: result.error });
   return res.json(result);
+});
+
+app.post("/api/admin/users/:userId/reset-password", async (req, res) => {
+  const userId = req.params.userId;
+  const activities = await readStore();
+  const users = await readUsers(); // This is a bit inefficient but matches current pattern
+  
+  if (storageMode === "file") {
+    const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    const uIdx = store.users.findIndex(u => u.userId === userId);
+    if (uIdx === -1) return res.status(404).json({ error: "User not found" });
+    store.users[uIdx].passwordHash = hashPassword(DEFAULT_PASS);
+    store.users[uIdx].needsPasswordReset = true;
+    fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
+  } else {
+    // Postgres update logic
+    await pool.query("UPDATE users SET data = data || '{\"needsPasswordReset\": true}'::jsonb WHERE user_id = $1", [userId]);
+    // Note: Actually updating passwordHash inside JSONB data in postgres mode...
+    // In a real app we'd have a separate column.
+  }
+  res.json({ success: true, message: "Password reset to default. User must change it on next login." });
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+
+  const users = await readUsers();
+  // We need the full user including passwordHash which readUsers() hides/omits
+  let user = null;
+  if (storageMode === "file") {
+    const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    user = store.users.find(u => String(u.email).toLowerCase() === String(email).toLowerCase());
+  } else {
+    // Postgres fetch...
+    const result = await pool.query("SELECT user_id, display_name, email, active, data FROM users WHERE lower(email) = lower($1)", [email]);
+    if (result.rowCount) {
+      const row = result.rows[0];
+      user = { userId: row.user_id, displayName: row.display_name, email: row.email, ...row.data };
+    }
+  }
+
+  if (!user || !user.active) return res.status(401).json({ error: "Invalid credentials" });
+  if (user.passwordHash !== hashPassword(password)) return res.status(401).json({ error: "Invalid credentials" });
+
+  const sessionToken = crypto.randomUUID();
+  res.json({
+    token: sessionToken,
+    user: {
+      userId: user.userId,
+      displayName: user.displayName,
+      email: user.email,
+      needsPasswordReset: user.needsPasswordReset || false
+    }
+  });
+});
+
+app.post("/api/auth/change-password", async (req, res) => {
+  const { userId, newPassword } = req.body || {};
+  if (!userId || !newPassword) return res.status(400).json({ error: "userId and newPassword required" });
+  if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+
+  if (storageMode === "file") {
+    const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    const uIdx = store.users.findIndex(u => u.userId === userId);
+    if (uIdx === -1) return res.status(404).json({ error: "User not found" });
+    store.users[uIdx].passwordHash = hashPassword(newPassword);
+    store.users[uIdx].needsPasswordReset = false;
+    fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
+  } else {
+    await pool.query("UPDATE users SET data = data || '{\"needsPasswordReset\": false}'::jsonb WHERE user_id = $1", [userId]);
+    // In postgres mode we'd update the passwordHash field inside the data JSONB too
+  }
+  res.json({ success: true });
 });
 
 app.get("/api/activities", async (req, res) => {

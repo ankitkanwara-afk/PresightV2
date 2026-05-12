@@ -42,6 +42,13 @@ body {
 .sidebar-nav {
   display: grid;
   gap: 6px;
+  flex: 1;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .nav-item {
@@ -426,4 +433,23 @@ button {
   .section-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.login-backdrop {
+  z-index: 1000;
+  background: linear-gradient(135deg, var(--brand-a), var(--brand-c));
+}
+
+.login-modal {
+  max-width: 420px !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.error-text {
+  color: #b91c1c;
+  font-size: 13px;
+  background: #fee2e2;
+  padding: 8px;
+  border-radius: 4px;
+  margin: 0;
 }

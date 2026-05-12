@@ -17,6 +17,9 @@
           <button type="button" class="nav-item" data-nav-view="reportsView">Reports</button>
           <button type="button" class="nav-item" data-nav-view="adminView">Admin</button>
         </nav>
+        <div class="sidebar-footer">
+          <button id="logoutBtn" type="button" class="nav-item ghost-btn">Logout</button>
+        </div>
       </aside>
 
       <section class="workspace">
@@ -142,6 +145,7 @@
                       <th>Name</th>
                       <th>Email</th>
                       <th>Active</th>
+                      <th>Auth</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
@@ -150,6 +154,35 @@
             </article>
           </section>
         </main>
+      </section>
+    </div>
+    
+    <div id="loginOverlay" class="modal-backdrop login-backdrop hidden">
+      <section class="modal login-modal">
+        <div class="modal-header">
+          <h3>PreSight Login</h3>
+        </div>
+        <form id="loginForm" class="form-grid">
+          <label>Email <input id="loginEmail" type="email" placeholder="your.email@gupshup.io" required /></label>
+          <label>Password <input id="loginPassword" type="password" placeholder="••••••••" required /></label>
+          <p id="loginMessage" class="error-text hidden"></p>
+          <button type="submit">Login</button>
+        </form>
+      </section>
+    </div>
+
+    <div id="passwordResetOverlay" class="modal-backdrop login-backdrop hidden">
+      <section class="modal login-modal">
+        <div class="modal-header">
+          <h3>Set New Password</h3>
+        </div>
+        <p class="text-muted">You must update your default password to continue.</p>
+        <form id="passwordResetForm" class="form-grid">
+          <label>New Password <input id="resetNewPassword" type="password" minlength="6" required /></label>
+          <label>Confirm Password <input id="resetConfirmPassword" type="password" minlength="6" required /></label>
+          <p id="resetMessage" class="error-text hidden"></p>
+          <button type="submit">Update Password</button>
+        </form>
       </section>
     </div>
 

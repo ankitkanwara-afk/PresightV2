@@ -101,6 +101,25 @@ function selectedMonth() {
 function userName(id) {
   return state.users.find((u) => u.id === id)?.name || id;
 }
+
+let sessionUser = null;
+let sessionToken = localStorage.getItem("presight-session-token");
+if (sessionToken) {
+  const storedUser = localStorage.getItem("presight-session-user");
+  if (storedUser) sessionUser = JSON.parse(storedUser);
+}
+
+function checkAuth() {
+  if (!sessionToken || !sessionUser) {
+    document.getElementById("loginOverlay").classList.remove("hidden");
+    return false;
+  }
+  if (sessionUser.needsPasswordReset) {
+    document.getElementById("passwordResetOverlay").classList.remove("hidden");
+    return false;
+  }
+  return true;
+}
 function normalizeUsers(list) {
   return (Array.isArray(list) ? list : []).map((u) => ({
     id: u.id || u.userId,
@@ -160,6 +179,7 @@ function winsLosses(list) {
 let apiReportData = null;
 
 function setView(viewId) {
+  if (!checkAuth()) return;
   ["dashboardView", "activitiesView", "winsView", "reportsView", "adminView"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== viewId);
     document.getElementById(id).classList.toggle("active-view", id === viewId);
@@ -329,6 +349,9 @@ function renderAdminUsersTable() {
       <td>${u.name || "-"}</td>
       <td>${u.email || "-"}</td>
       <td>${u.active ? "Yes" : "No"}</td>
+      <td>
+        <button class="tiny-btn secondary-btn" data-action="reset-pass" data-id="${u.id}" type="button">Reset Password</button>
+      </td>
     </tr>`
     )
     .join("");
@@ -432,6 +455,7 @@ function monthTitle(monthStr) {
 }
 
 async function refresh() {
+  if (!checkAuth()) return;
   const month = selectedMonth();
   const modeLabel = activityViewMode === "pending" ? "Pending Commit" : "All";
   document.getElementById("listTitle").textContent = `My Activities - ${month} (${modeLabel})`;
@@ -541,6 +565,89 @@ function setup() {
           .then(() => refresh())
           .catch(console.error);
       }
+      return;
+    }
+    if (action === "reset-pass") {
+      if (window.confirm(`Reset password for ${userName(id)} to default?`)) {
+        fetch(`${API_BASE}/api/admin/users/${id}/reset-password`, { method: "POST" })
+          .then(r => r.json())
+          .then(data => alert(data.message || "Password reset."))
+          .catch(console.error);
+      }
+    }
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", () => {
+    localStorage.removeItem("presight-session-token");
+    localStorage.removeItem("presight-session-user");
+    location.reload();
+  });
+
+  const loginForm = document.getElementById("loginForm");
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    const msg = document.getElementById("loginMessage");
+    msg.classList.add("hidden");
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        msg.textContent = data.error || "Login failed";
+        msg.classList.remove("hidden");
+        return;
+      }
+      sessionToken = data.token;
+      sessionUser = data.user;
+      localStorage.setItem("presight-session-token", sessionToken);
+      localStorage.setItem("presight-session-user", JSON.stringify(sessionUser));
+      document.getElementById("loginOverlay").classList.add("hidden");
+      refresh();
+    } catch {
+      msg.textContent = "Network error during login.";
+      msg.classList.remove("hidden");
+    }
+  });
+
+  const resetForm = document.getElementById("passwordResetForm");
+  resetForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const newPass = document.getElementById("resetNewPassword").value;
+    const confirmPass = document.getElementById("resetConfirmPassword").value;
+    const msg = document.getElementById("resetMessage");
+    msg.classList.add("hidden");
+
+    if (newPass !== confirmPass) {
+      msg.textContent = "Passwords do not match.";
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: sessionUser.userId, newPassword: newPass })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        msg.textContent = data.error || "Reset failed";
+        msg.classList.remove("hidden");
+        return;
+      }
+      sessionUser.needsPasswordReset = false;
+      localStorage.setItem("presight-session-user", JSON.stringify(sessionUser));
+      document.getElementById("passwordResetOverlay").classList.add("hidden");
+      refresh();
+    } catch {
+      msg.textContent = "Network error during reset.";
+      msg.classList.remove("hidden");
     }
   });
 
