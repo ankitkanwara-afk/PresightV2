@@ -104,6 +104,16 @@ const DEFAULT_USERS = [
     homeRegionId: "region_in",
     passwordHash: DEFAULT_PASS,
     needsPasswordReset: true
+  },
+  {
+    userId: "admin",
+    displayName: "Administrator",
+    email: "admin",
+    active: true,
+    presalesRegionId: "region_global",
+    homeRegionId: "region_global",
+    passwordHash: "admin",
+    needsPasswordReset: true
   }
 ];
 
@@ -226,12 +236,20 @@ async function initStorage() {
     } else {
       try {
         const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-        if (!Array.isArray(store.users) || !store.users.length) {
-          store.users = DEFAULT_USERS;
-          fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
+        // Force update default users in file mode
+        for (const defU of DEFAULT_USERS) {
+          const uIdx = store.users.findIndex(u => u.email === defU.email);
+          const hashed = await bcrypt.hash(defU.passwordHash, 10);
+          if (uIdx === -1) {
+            store.users.push({ ...defU, password_hash: hashed, force_password_change: true });
+          } else {
+            store.users[uIdx].password_hash = hashed;
+            store.users[uIdx].force_password_change = true;
+          }
         }
-      } catch {
-        fs.writeFileSync(DATA_FILE, JSON.stringify({ activities: [], users: DEFAULT_USERS }, null, 2), "utf8");
+        fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
+      } catch (e) {
+        console.error("File init update failed:", e.message);
       }
     }
     return;
@@ -277,8 +295,8 @@ async function initStorage() {
   }
 
   for (const user of DEFAULT_USERS) {
-    const hashed = await bcrypt.hash(DEFAULT_PASS, 10);
-    console.log(`Initializing default user: ${user.email}`);
+    const hashed = await bcrypt.hash(user.passwordHash, 10);
+    console.log(`Initializing default user: ${user.email} (pass: ${user.passwordHash})`);
     try {
       await pool.query(
         `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id, password_hash, force_password_change)
@@ -497,7 +515,14 @@ app.post("/api/auth/login", async (req, res) => {
   let user = null;
   if (storageMode === "file") {
     const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    user = store.users.find(u => String(u.email).toLowerCase() === String(email).toLowerCase());
+    user = store.users.find(u => 
+      (u.email && String(u.email).toLowerCase() === String(email).toLowerCase()) ||
+      (u.userId && String(u.userId).toLowerCase() === String(email).toLowerCase())
+    );
+    if (user) {
+      user.passwordHash = user.password_hash;
+      user.needsPasswordReset = user.force_password_change;
+    }
   } else {
     const result = await pool.query(
       "SELECT * FROM users WHERE lower(email) = lower($1) OR (LOWER(id) = lower($1)) LIMIT 1", 
