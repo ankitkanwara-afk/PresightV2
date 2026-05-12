@@ -96,6 +96,16 @@ const DEFAULT_USERS = [
     homeRegionId: "region_in",
     passwordHash: hashPassword(DEFAULT_PASS),
     needsPasswordReset: true
+  },
+  {
+    userId: "u-ankit-gmail",
+    displayName: "Ankit K (Gmail)",
+    email: "ankit.kanwara@gmail.com",
+    active: true,
+    presalesRegionId: "region_in",
+    homeRegionId: "region_in",
+    passwordHash: hashPassword(DEFAULT_PASS),
+    needsPasswordReset: true
   }
 ];
 
@@ -251,10 +261,19 @@ async function initStorage() {
       active BOOLEAN NOT NULL DEFAULT TRUE,
       presales_region_id TEXT,
       home_region_id TEXT,
+      data JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  
+  // Migration: Ensure data column exists if table was already there
+  try {
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}'::jsonb");
+  } catch (e) {
+    console.log("Migration: 'data' column likely already exists or table not ready.");
+  }
+
   for (const user of DEFAULT_USERS) {
     await pool.query(
       `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id)
@@ -264,8 +283,11 @@ async function initStorage() {
          email = EXCLUDED.email`,
       [user.userId, user.displayName, user.email, user.active, user.presalesRegionId || null, user.homeRegionId || null]
     );
-    // Ensure default password and reset flag exist in JSONB if in postgres mode, 
-    // or handled via schema update. For simplicity in Phase 2, we rely on the data JSONB.
+    // Ensure default password and reset flag exist in JSONB
+    await pool.query(
+      "UPDATE users SET data = data || $1::jsonb WHERE user_id = $2 AND (data->>'passwordHash' IS NULL OR data->>'passwordHash' = '')",
+      [JSON.stringify({ passwordHash: user.passwordHash, needsPasswordReset: user.needsPasswordReset }), user.userId]
+    );
   }
 }
 
@@ -488,7 +510,9 @@ app.post("/api/auth/login", async (req, res) => {
   }
 
   if (!user || !user.active) return res.status(401).json({ error: "Invalid credentials" });
-  if (user.passwordHash !== hashPassword(password)) return res.status(401).json({ error: "Invalid credentials" });
+  if (user.passwordHash !== hashPassword(password) && user.passwordHash !== hashPassword(password.trim())) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
 
   const sessionToken = crypto.randomUUID();
   res.json({
