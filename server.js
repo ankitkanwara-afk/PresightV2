@@ -10,11 +10,9 @@ const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "activities.json");
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const INGEST_API_TOKEN = process.env.INGEST_API_TOKEN || "";
-const DEFAULT_PASS = "Gup$hup.i0";
+const bcrypt = require("bcrypt");
 
-function hashPassword(pass) {
-  return crypto.createHash("sha256").update(pass).digest("hex");
-}
+const DEFAULT_PASS = "Gup$hup.i0";
 
 const ENUMS = {
   category: ["external", "internal"],
@@ -94,7 +92,7 @@ const DEFAULT_USERS = [
     active: true,
     presalesRegionId: "region_in",
     homeRegionId: "region_in",
-    passwordHash: hashPassword(DEFAULT_PASS),
+    passwordHash: DEFAULT_PASS, // Will be hashed on first use or init
     needsPasswordReset: true
   },
   {
@@ -104,7 +102,7 @@ const DEFAULT_USERS = [
     active: true,
     presalesRegionId: "region_in",
     homeRegionId: "region_in",
-    passwordHash: hashPassword(DEFAULT_PASS),
+    passwordHash: DEFAULT_PASS,
     needsPasswordReset: true
   }
 ];
@@ -261,32 +259,33 @@ async function initStorage() {
       active BOOLEAN NOT NULL DEFAULT TRUE,
       presales_region_id TEXT,
       home_region_id TEXT,
+      password_hash TEXT,
+      force_password_change BOOLEAN DEFAULT TRUE,
       data JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
   
-  // Migration: Ensure data column exists if table was already there
+  // Migrations for existing tables
   try {
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}'::jsonb");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT");
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS force_password_change BOOLEAN DEFAULT TRUE");
   } catch (e) {
-    console.log("Migration: 'data' column likely already exists or table not ready.");
+    console.log("Migration: Columns might already exist.");
   }
 
   for (const user of DEFAULT_USERS) {
+    const hashed = await bcrypt.hash(DEFAULT_PASS, 10);
     await pool.query(
-      `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id, password_hash, force_password_change)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (user_id) DO UPDATE SET 
          display_name = EXCLUDED.display_name,
-         email = EXCLUDED.email`,
-      [user.userId, user.displayName, user.email, user.active, user.presalesRegionId || null, user.homeRegionId || null]
-    );
-    // Force sync of critical fields to 'data' JSONB for default users
-    await pool.query(
-      "UPDATE users SET data = COALESCE(data, '{}'::jsonb) || $1::jsonb WHERE user_id = $2",
-      [JSON.stringify({ passwordHash: user.passwordHash, needsPasswordReset: user.needsPasswordReset }), user.userId]
+         email = EXCLUDED.email,
+         password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)`,
+      [user.userId, user.displayName, user.email, user.active, user.presalesRegionId || null, user.homeRegionId || null, hashed, true]
     );
   }
 }
@@ -325,7 +324,7 @@ async function readUsers() {
     active: r.active,
     presalesRegionId: r.presales_region_id,
     homeRegionId: r.home_region_id,
-    needsPasswordReset: r.data?.needsPasswordReset
+    needsPasswordReset: r.force_password_change || false
   }));
 }
 
@@ -353,8 +352,8 @@ async function createUser({ displayName, email }) {
       active: true,
       presalesRegionId: "region_in",
       homeRegionId: "region_in",
-      passwordHash: hashPassword(DEFAULT_PASS),
-      needsPasswordReset: true
+      password_hash: await bcrypt.hash(DEFAULT_PASS, 10),
+      force_password_change: true
     };
     users.push(user);
     store.users = users;
@@ -471,21 +470,17 @@ app.delete("/api/admin/users/:userId", async (req, res) => {
 
 app.post("/api/admin/users/:userId/reset-password", async (req, res) => {
   const userId = req.params.userId;
-  const activities = await readStore();
-  const users = await readUsers(); // This is a bit inefficient but matches current pattern
+  const hashed = await bcrypt.hash(DEFAULT_PASS, 10);
   
   if (storageMode === "file") {
     const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     const uIdx = store.users.findIndex(u => u.userId === userId);
     if (uIdx === -1) return res.status(404).json({ error: "User not found" });
-    store.users[uIdx].passwordHash = hashPassword(DEFAULT_PASS);
-    store.users[uIdx].needsPasswordReset = true;
+    store.users[uIdx].password_hash = hashed;
+    store.users[uIdx].force_password_change = true;
     fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
   } else {
-    // Postgres update logic
-    await pool.query("UPDATE users SET data = data || '{\"needsPasswordReset\": true}'::jsonb WHERE user_id = $1", [userId]);
-    // Note: Actually updating passwordHash inside JSONB data in postgres mode...
-    // In a real app we'd have a separate column.
+    await pool.query("UPDATE users SET password_hash = $1, force_password_change = true WHERE user_id = $2", [hashed, userId]);
   }
   res.json({ success: true, message: "Password reset to default. User must change it on next login." });
 });
@@ -494,18 +489,25 @@ app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: "Email and password required" });
 
-  const users = await readUsers();
-  // We need the full user including passwordHash which readUsers() hides/omits
   let user = null;
   if (storageMode === "file") {
     const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     user = store.users.find(u => String(u.email).toLowerCase() === String(email).toLowerCase());
   } else {
-    // Postgres fetch...
-    const result = await pool.query("SELECT user_id, display_name, email, active, data FROM users WHERE lower(email) = lower($1)", [email]);
+    const result = await pool.query(
+      "SELECT user_id, display_name, email, active, password_hash, force_password_change FROM users WHERE lower(email) = lower($1)", 
+      [email]
+    );
     if (result.rowCount) {
-      const row = result.rows[0];
-      user = { userId: row.user_id, displayName: row.display_name, email: row.email, ...row.data };
+      const r = result.rows[0];
+      user = { 
+        userId: r.user_id, 
+        displayName: r.display_name, 
+        email: r.email, 
+        active: r.active, 
+        passwordHash: r.password_hash, 
+        needsPasswordReset: r.force_password_change 
+      };
     }
   }
 
@@ -514,10 +516,28 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
-  const isMatch = (user.passwordHash === hashPassword(password) || user.passwordHash === hashPassword(password.trim()));
-  if (!isMatch) {
-    console.log(`Login Failed: Password mismatch for ${email}`);
-    return res.status(401).json({ error: "Invalid credentials" });
+  const match = await bcrypt.compare(password.trim(), user.passwordHash || "");
+  if (!match) {
+    // Fallback for legacy SHA256 if migration is still pending or if it was set recently
+    const legacyHash = crypto.createHash("sha256").update(password.trim()).digest("hex");
+    if (user.passwordHash === legacyHash) {
+      console.log(`Login Success (Legacy SHA256): ${email}`);
+      // Auto-migrate to bcrypt
+      const newHash = await bcrypt.hash(password.trim(), 10);
+      if (storageMode === "file") {
+        const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+        const uIdx = store.users.findIndex(u => u.userId === user.userId);
+        if (uIdx !== -1) {
+          store.users[uIdx].password_hash = newHash;
+          fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
+        }
+      } else {
+        await pool.query("UPDATE users SET password_hash = $1 WHERE user_id = $2", [newHash, user.userId]);
+      }
+    } else {
+      console.log(`Login Failed: Password mismatch for ${email}`);
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
   }
 
   console.log(`Login Success: ${email}`);
@@ -538,16 +558,17 @@ app.post("/api/auth/change-password", async (req, res) => {
   if (!userId || !newPassword) return res.status(400).json({ error: "userId and newPassword required" });
   if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
 
+  const hashed = await bcrypt.hash(newPassword.trim(), 10);
+
   if (storageMode === "file") {
     const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     const uIdx = store.users.findIndex(u => u.userId === userId);
     if (uIdx === -1) return res.status(404).json({ error: "User not found" });
-    store.users[uIdx].passwordHash = hashPassword(newPassword);
-    store.users[uIdx].needsPasswordReset = false;
+    store.users[uIdx].password_hash = hashed;
+    store.users[uIdx].force_password_change = false;
     fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
   } else {
-    await pool.query("UPDATE users SET data = data || '{\"needsPasswordReset\": false}'::jsonb WHERE user_id = $1", [userId]);
-    // In postgres mode we'd update the passwordHash field inside the data JSONB too
+    await pool.query("UPDATE users SET password_hash = $1, force_password_change = false WHERE user_id = $2", [hashed, userId]);
   }
   res.json({ success: true });
 });
