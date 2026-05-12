@@ -2,11 +2,13 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
+const { Pool } = require("pg");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "activities.json");
+const DATABASE_URL = process.env.DATABASE_URL || "";
 
 const ENUMS = {
   category: ["external", "internal"],
@@ -26,7 +28,8 @@ const TAXONOMIES = {
     { id: "at_sow", label: "SOW", is_active: true, sort_order: 2 },
     { id: "at_poc", label: "POC", is_active: true, sort_order: 3 },
     { id: "at_rfx", label: "RFx", is_active: true, sort_order: 4 },
-    { id: "at_other", label: "Other", is_active: true, sort_order: 5 }
+    { id: "at_pricing", label: "Pricing", is_active: true, sort_order: 5 },
+    { id: "at_other", label: "Other", is_active: true, sort_order: 6 }
   ],
   callTypes: [
     { id: "ct_demo", label: "Demo", is_active: true, sort_order: 1 },
@@ -42,7 +45,13 @@ const TAXONOMIES = {
     { id: "ind_retail_ecom", label: "Retail & eCommerce", is_active: true, sort_order: 2 },
     { id: "ind_healthcare", label: "Healthcare", is_active: true, sort_order: 3 },
     { id: "ind_telecom", label: "Telecom", is_active: true, sort_order: 4 },
-    { id: "ind_saas_tech", label: "SaaS / Technology", is_active: true, sort_order: 5 },
+    { id: "ind_travel_hospitality", label: "Travel & Hospitality", is_active: true, sort_order: 5 },
+    { id: "ind_media_entertainment", label: "Media & Entertainment", is_active: true, sort_order: 6 },
+    { id: "ind_education", label: "Education", is_active: true, sort_order: 7 },
+    { id: "ind_public_sector", label: "Public Sector / Government", is_active: true, sort_order: 8 },
+    { id: "ind_manufacturing", label: "Manufacturing", is_active: true, sort_order: 9 },
+    { id: "ind_logistics_supply", label: "Logistics & Supply Chain", is_active: true, sort_order: 10 },
+    { id: "ind_saas_tech", label: "SaaS / Technology", is_active: true, sort_order: 11 },
     { id: "ind_other", label: "Other", is_active: true, sort_order: 99 }
   ]
 };
@@ -56,27 +65,8 @@ const USERS = [
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-function ensureStore() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify({ activities: [] }, null, 2), "utf8");
-  }
-}
-
-function readStore() {
-  ensureStore();
-  try {
-    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    return Array.isArray(data.activities) ? data.activities : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeStore(activities) {
-  ensureStore();
-  fs.writeFileSync(DATA_FILE, JSON.stringify({ activities }, null, 2), "utf8");
-}
+let pool = null;
+let storageMode = "file";
 
 function isRequired(value) {
   return value !== undefined && value !== null && String(value).trim() !== "";
@@ -159,17 +149,80 @@ function upsertByFingerprint(activities, incoming) {
   return { action: "update", idx };
 }
 
-app.get("/api/health", (req, res) => {
-  const activities = readStore();
-  res.json({ status: "ok", app: "presales-impact-phase1", activityCount: activities.length });
+async function initStorage() {
+  if (!DATABASE_URL) {
+    storageMode = "file";
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, JSON.stringify({ activities: [] }, null, 2), "utf8");
+    return;
+  }
+
+  storageMode = "postgres";
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false }
+  });
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS activities (
+      id TEXT PRIMARY KEY,
+      external_fingerprint TEXT UNIQUE,
+      data JSONB NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+
+async function readStore() {
+  if (storageMode === "file") {
+    try {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+      return Array.isArray(data.activities) ? data.activities : [];
+    } catch {
+      return [];
+    }
+  }
+  const result = await pool.query("SELECT data FROM activities ORDER BY updated_at DESC");
+  return result.rows.map((r) => r.data);
+}
+
+async function writeStore(activities) {
+  if (storageMode === "file") {
+    fs.writeFileSync(DATA_FILE, JSON.stringify({ activities }, null, 2), "utf8");
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("TRUNCATE TABLE activities");
+    for (const a of activities) {
+      await client.query(
+        `INSERT INTO activities (id, external_fingerprint, data, created_at, updated_at)
+         VALUES ($1, $2, $3::jsonb, COALESCE($4::timestamptz, NOW()), COALESCE($5::timestamptz, NOW()))`,
+        [a.id, a.externalFingerprint || null, JSON.stringify(a), a.createdAt || null, a.updatedAt || null]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+app.get("/api/health", async (req, res) => {
+  const activities = await readStore();
+  res.json({ status: "ok", app: "presales-impact-phase1", storageMode, activityCount: activities.length });
 });
 
 app.get("/api/config/taxonomies", (req, res) => {
   res.json({ enums: ENUMS, taxonomies: TAXONOMIES, users: USERS });
 });
 
-app.get("/api/activities", (req, res) => {
-  const activities = readStore();
+app.get("/api/activities", async (req, res) => {
+  const activities = await readStore();
   const { month, ownerUserId, commitStatus, sourceType } = req.query;
   let list = activities;
   if (month) list = list.filter((a) => String(a.date || "").startsWith(`${month}`));
@@ -179,9 +232,9 @@ app.get("/api/activities", (req, res) => {
   res.json({ items: list });
 });
 
-app.get("/api/reports/wins-losses", (req, res) => {
+app.get("/api/reports/wins-losses", async (req, res) => {
   const { month, ownerUserId } = req.query;
-  let list = readStore().filter((a) => a.recordStatus !== "archived");
+  let list = (await readStore()).filter((a) => a.recordStatus !== "archived");
   if (month) list = list.filter((a) => String(a.date || "").startsWith(`${month}`));
   if (ownerUserId) list = list.filter((a) => a.ownerUserId === ownerUserId);
 
@@ -192,75 +245,80 @@ app.get("/api/reports/wins-losses", (req, res) => {
   res.json({ wins, losses, winRate });
 });
 
-app.post("/api/activities", (req, res) => {
+app.post("/api/activities", async (req, res) => {
   const nowIso = new Date().toISOString();
-  const activities = readStore();
+  const activities = await readStore();
   const record = normalizeRecord(req.body || {}, nowIso);
   const missing = validateRequired(record);
-  if (missing.length) {
-    return res.status(400).json({ error: "Missing required fields", missing });
-  }
+  if (missing.length) return res.status(400).json({ error: "Missing required fields", missing });
+
   enforceLeadConstraint(record, activities);
   applySfdcConflict(record);
   activities.push(record);
-  writeStore(activities);
+  await writeStore(activities);
   return res.status(201).json({ item: record });
 });
 
-app.patch("/api/activities/:id", (req, res) => {
-  const activities = readStore();
+app.patch("/api/activities/:id", async (req, res) => {
+  const activities = await readStore();
   const idx = activities.findIndex((a) => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Activity not found" });
+
   const nowIso = new Date().toISOString();
   const merged = normalizeRecord({ ...activities[idx], ...req.body, id: activities[idx].id, createdAt: activities[idx].createdAt }, nowIso);
   const missing = validateRequired(merged);
   if (missing.length) return res.status(400).json({ error: "Missing required fields", missing });
+
   enforceLeadConstraint(merged, activities);
   applySfdcConflict(merged);
   activities[idx] = merged;
-  writeStore(activities);
+  await writeStore(activities);
   return res.json({ item: merged });
 });
 
-app.patch("/api/activities/:id/commit", (req, res) => {
-  const activities = readStore();
+app.patch("/api/activities/:id/commit", async (req, res) => {
+  const activities = await readStore();
   const idx = activities.findIndex((a) => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Activity not found" });
+
   const status = req.body?.commitStatus || (activities[idx].commitStatus === "committed" ? "not_committed" : "committed");
   if (!ENUMS.commitStatus.includes(status)) return res.status(400).json({ error: "Invalid commitStatus" });
+
   activities[idx].commitStatus = status;
   activities[idx].updatedAt = new Date().toISOString();
-  writeStore(activities);
+  await writeStore(activities);
   return res.json({ item: activities[idx] });
 });
 
-app.post("/api/activities/:id/reject", (req, res) => {
-  const activities = readStore();
+app.post("/api/activities/:id/reject", async (req, res) => {
+  const activities = await readStore();
   const idx = activities.findIndex((a) => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Activity not found" });
+
   activities[idx].recordStatus = "archived";
   activities[idx].rejectedAt = new Date().toISOString();
   activities[idx].updatedAt = activities[idx].rejectedAt;
-  writeStore(activities);
+  await writeStore(activities);
   return res.json({ item: activities[idx] });
 });
 
-app.delete("/api/activities/:id", (req, res) => {
-  const activities = readStore();
+app.delete("/api/activities/:id", async (req, res) => {
+  const activities = await readStore();
   const idx = activities.findIndex((a) => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Activity not found" });
+
   const removed = activities.splice(idx, 1)[0];
-  writeStore(activities);
+  await writeStore(activities);
   return res.json({ deleted: true, item: removed });
 });
 
-app.post("/api/superagent/ingest-batch", (req, res) => {
+app.post("/api/superagent/ingest-batch", async (req, res) => {
   const body = req.body || {};
   const records = Array.isArray(body.records) ? body.records : [];
   if (!records.length) return res.status(400).json({ error: "records[] is required" });
 
   const nowIso = new Date().toISOString();
-  const activities = readStore();
+  const activities = await readStore();
   let inserted = 0;
   let updated = 0;
   let conflicts = 0;
@@ -276,6 +334,7 @@ app.post("/api/superagent/ingest-batch", (req, res) => {
       },
       nowIso
     );
+
     const missing = validateRequired(normalized);
     if (missing.length) {
       errors.push({ index: i, error: "Missing required fields", missing });
@@ -320,7 +379,7 @@ app.post("/api/superagent/ingest-batch", (req, res) => {
     });
   }
 
-  writeStore(activities);
+  await writeStore(activities);
   return res.status(errors.length ? 207 : 200).json({
     ingestBatchId: body.ingestBatchId || `batch-${nowIso}`,
     attempted: records.length,
@@ -336,7 +395,13 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.listen(PORT, () => {
-  ensureStore();
-  console.log(`Presales Impact Console running on http://localhost:${PORT}`);
-});
+initStorage()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Presales Impact Console running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize storage:", err);
+    process.exit(1);
+  });
