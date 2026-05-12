@@ -10,7 +10,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "activities.json");
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const INGEST_API_TOKEN = process.env.INGEST_API_TOKEN || "";
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
 const DEFAULT_PASS = "Gup$hup.i0";
 
