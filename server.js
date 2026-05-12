@@ -509,11 +509,18 @@ app.post("/api/auth/login", async (req, res) => {
     }
   }
 
-  if (!user || !user.active) return res.status(401).json({ error: "Invalid credentials" });
-  if (user.passwordHash !== hashPassword(password) && user.passwordHash !== hashPassword(password.trim())) {
+  if (!user || !user.active) {
+    console.log(`Login Failed: User not found or inactive (${email})`);
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
+  const isMatch = (user.passwordHash === hashPassword(password) || user.passwordHash === hashPassword(password.trim()));
+  if (!isMatch) {
+    console.log(`Login Failed: Password mismatch for ${email}`);
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  console.log(`Login Success: ${email}`);
   const sessionToken = crypto.randomUUID();
   res.json({
     token: sessionToken,
