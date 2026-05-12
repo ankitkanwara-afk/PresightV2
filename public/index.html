@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PreSight Activity Workspace v2</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>PreSight2 - Presales Impact Console</h1>
+      <div class="topbar-actions">
+        <button id="prevMonthBtn" type="button" class="ghost-btn">Prev</button>
+        <label>
+          Month
+          <input id="monthFilter" type="month" />
+        </label>
+        <button id="nextMonthBtn" type="button" class="ghost-btn">Next</button>
+        <button id="resetDemoBtn" type="button" class="secondary-btn">Reset Demo Data</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="dashboardView" class="view active-view">
+        <section class="kpi-grid dashboard-cards" id="dashboardCards"></section>
+      </section>
+
+      <section id="activitiesView" class="view hidden">
+        <div class="section-header">
+          <h2 id="listTitle">My Activities</h2>
+          <div>
+            <button id="backToDashboardFromActivities" type="button" class="ghost-btn">Back to Dashboard</button>
+            <button id="openLogModalBtn" type="button">+ Log New Activity</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="activityTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Source</th>
+                <th>Type</th>
+                <th>Call Type</th>
+                <th>Account</th>
+                <th>Industry</th>
+                <th>Use Cases</th>
+                <th>Products</th>
+                <th>Description</th>
+                <th>Role</th>
+                <th>Commit</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="winsView" class="view hidden">
+        <div class="section-header">
+          <h2>SFDC Opportunities - My Wins / Losses</h2>
+          <button id="backToDashboardFromWins" type="button" class="ghost-btn">Back to Dashboard</button>
+        </div>
+        <div class="table-wrap">
+          <table id="winsTable">
+            <thead>
+              <tr>
+                <th>Opportunity</th>
+                <th>Account</th>
+                <th>Status</th>
+                <th>Presales Owner</th>
+                <th>SFDC Link</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <div id="logModalBackdrop" class="modal-backdrop hidden">
+      <section class="modal">
+        <div class="modal-header">
+          <h3 id="activityModalTitle">Log Activity</h3>
+          <button id="closeLogModalBtn" type="button" class="ghost-btn">X</button>
+        </div>
+        <form id="activityForm" class="form-grid">
+          <input name="ownerUserId" type="hidden" />
+          <section class="form-section full">
+            <h4>1) Core Activity</h4>
+            <div class="section-grid">
+              <label>Date <input name="date" type="date" required /></label>
+              <div class="inline-note">Owner: <strong id="currentUserLabel"></strong></div>
+              <label>Source
+                <select name="sourceType" required>
+                  <option value="superagent">SuperAgent</option>
+                  <option value="manual">Manual</option>
+                </select>
+              </label>
+              <label>Category
+                <select name="category" required>
+                  <option value="external">External</option>
+                  <option value="internal">Internal</option>
+                </select>
+              </label>
+              <label>Activity Type
+                <select name="activityTypeId" id="activityTypeInput" required></select>
+              </label>
+              <label>Meeting Key
+                <input name="meetingKey" placeholder="calendar-event-id or unique key" />
+              </label>
+              <label id="callTypeGroup">Call Type
+                <select name="callTypeId" id="callTypeInput">
+                  <option value="">N/A</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section full">
+            <h4>2) Meeting Context</h4>
+            <div class="section-grid">
+              <label>Joined Call?
+                <select name="joinedCall">
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <label>Participation
+                <select name="participationRole">
+                  <option value="lead">Lead</option>
+                  <option value="contributor">Contributor</option>
+                </select>
+              </label>
+              <label>Co-Participants
+                <select name="coParticipants" multiple size="3"></select>
+              </label>
+              <label>Account Name <input name="accountName" /></label>
+              <label>Industry
+                <select name="industryId"></select>
+              </label>
+              <label>Use Cases
+                <select name="useCaseIds" multiple size="4"></select>
+              </label>
+              <label>Channels
+                <select name="channelIds" multiple size="4"></select>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section full">
+            <h4>3) Outcome and Evidence</h4>
+            <div class="section-grid">
+              <label>Products Discussed
+                <select name="productIds" multiple size="4"></select>
+              </label>
+              <label>Value Derived <input name="valueDerived" placeholder="Outcome/value created" /></label>
+              <label>Evidence Available
+                <select name="evidenceAvailable">
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <label>Linked Sources Count <input name="linkedSourceCount" type="number" min="0" step="1" value="1" /></label>
+              <label class="full description-priority">Description (Most Important)
+                <textarea name="summary" rows="4" required></textarea>
+              </label>
+              <label class="full">Next Steps
+                <textarea name="nextSteps" rows="2"></textarea>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section full">
+            <h4>4) CRM and Review</h4>
+            <div class="section-grid">
+              <label>SFDC Opportunity ID <input name="sfdcOpportunityId" /></label>
+              <label>SFDC Link <input name="sfdcOpportunityLink" /></label>
+              <label>CRM Link Status
+                <select name="crmLinkStatus">
+                  <option value="no_account">No account</option>
+                  <option value="account_matched_no_opp">Account matched, no opp</option>
+                  <option value="opportunity_linked">Opportunity linked</option>
+                </select>
+              </label>
+              <label>Deal Outcome
+                <select name="dealOutcome">
+                  <option value="open">Open</option>
+                  <option value="win">Win</option>
+                  <option value="loss">Loss</option>
+                </select>
+              </label>
+              <label>SFDC Presales Rep Name <input name="sfdcPresalesRepName" placeholder="Name from SFDC call" /></label>
+              <label class="inline-check">
+                <input type="checkbox" name="tagInternalToAccount" />
+                Internal strategy discussion linked to this account
+              </label>
+              <label>SOW Linked?
+                <select name="sowLinked">
+                  <option value="false">No</option>
+                  <option value="true">Yes</option>
+                </select>
+              </label>
+              <label>Commit Status
+                <select name="commitStatus">
+                  <option value="not_committed">Not committed</option>
+                  <option value="committed">Committed</option>
+                </select>
+              </label>
+            </div>
+          </section>
+          <div class="full modal-actions">
+            <button type="button" id="cancelLogModalBtn" class="secondary-btn">Cancel</button>
+            <button id="saveActivityBtn" type="submit">Save Activity</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
