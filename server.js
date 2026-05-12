@@ -278,15 +278,20 @@ async function initStorage() {
 
   for (const user of DEFAULT_USERS) {
     const hashed = await bcrypt.hash(DEFAULT_PASS, 10);
-    await pool.query(
-      `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id, password_hash, force_password_change)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (user_id) DO UPDATE SET 
-         display_name = EXCLUDED.display_name,
-         email = EXCLUDED.email,
-         password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)`,
-      [user.userId, user.displayName, user.email, user.active, user.presalesRegionId || null, user.homeRegionId || null, hashed, true]
-    );
+    console.log(`Initializing default user: ${user.email}`);
+    try {
+      await pool.query(
+        `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id, password_hash, force_password_change)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (email) DO UPDATE SET 
+           display_name = EXCLUDED.display_name,
+           password_hash = EXCLUDED.password_hash,
+           force_password_change = EXCLUDED.force_password_change`,
+        [user.userId, user.displayName, user.email, user.active, user.presalesRegionId || null, user.homeRegionId || null, hashed, true]
+      );
+    } catch (e) {
+      console.error(`Failed to init user ${user.email}:`, e.message);
+    }
   }
 }
 
@@ -495,16 +500,16 @@ app.post("/api/auth/login", async (req, res) => {
     user = store.users.find(u => String(u.email).toLowerCase() === String(email).toLowerCase());
   } else {
     const result = await pool.query(
-      "SELECT user_id, display_name, email, active, password_hash, force_password_change FROM users WHERE lower(email) = lower($1)", 
+      "SELECT * FROM users WHERE lower(email) = lower($1) OR (LOWER(id) = lower($1)) LIMIT 1", 
       [email]
     );
     if (result.rowCount) {
       const r = result.rows[0];
       user = { 
-        userId: r.user_id, 
-        displayName: r.display_name, 
+        userId: r.user_id || r.id, 
+        displayName: r.display_name || r.username, 
         email: r.email, 
-        active: r.active, 
+        active: r.active || r.is_active, 
         passwordHash: r.password_hash, 
         needsPasswordReset: r.force_password_change 
       };
