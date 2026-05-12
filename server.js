@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 3001;
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "activities.json");
 const DATABASE_URL = process.env.DATABASE_URL || "";
+const INGEST_API_TOKEN = process.env.INGEST_API_TOKEN || "";
 
 const ENUMS = {
   category: ["external", "internal"],
@@ -53,13 +54,42 @@ const TAXONOMIES = {
     { id: "ind_logistics_supply", label: "Logistics & Supply Chain", is_active: true, sort_order: 10 },
     { id: "ind_saas_tech", label: "SaaS / Technology", is_active: true, sort_order: 11 },
     { id: "ind_other", label: "Other", is_active: true, sort_order: 99 }
+  ],
+  useCases: [
+    { id: "uc_support_automation", label: "Support Automation", is_active: true, sort_order: 1 },
+    { id: "uc_sales_assist", label: "Sales Assist", is_active: true, sort_order: 2 },
+    { id: "uc_marketing_engagement", label: "Marketing Engagement", is_active: true, sort_order: 3 },
+    { id: "uc_commerce_conversational", label: "Conversational Commerce", is_active: true, sort_order: 4 },
+    { id: "uc_customer_service", label: "Customer Service", is_active: true, sort_order: 5 },
+    { id: "uc_internal_enablement", label: "Internal Enablement", is_active: true, sort_order: 6 },
+    { id: "uc_other", label: "Other", is_active: true, sort_order: 99 }
+  ],
+  channels: [
+    { id: "ch_whatsapp", label: "WhatsApp", is_active: true, sort_order: 1 },
+    { id: "ch_voice", label: "Voice", is_active: true, sort_order: 2 },
+    { id: "ch_web_chat", label: "Web Chat", is_active: true, sort_order: 3 },
+    { id: "ch_email", label: "Email", is_active: true, sort_order: 4 },
+    { id: "ch_other", label: "Other", is_active: true, sort_order: 99 }
+  ],
+  products: [
+    { id: "prd_ai_agents", label: "AI Agents", is_active: true, sort_order: 1 },
+    { id: "prd_agent_assist", label: "Agent Assist", is_active: true, sort_order: 2 },
+    { id: "prd_campaign_manager", label: "Campaign Manager", is_active: true, sort_order: 3 },
+    { id: "prd_journey_builder", label: "Journey Builder", is_active: true, sort_order: 4 },
+    { id: "prd_voice_ai", label: "Voice AI", is_active: true, sort_order: 5 },
+    { id: "prd_other", label: "Other", is_active: true, sort_order: 99 }
   ]
 };
 
-const USERS = [
-  { userId: "u-presales-1", displayName: "Ankit K", email: "ankit@example.com", active: true },
-  { userId: "u-presales-2", displayName: "Yashah S", email: "yashah@example.com", active: true },
-  { userId: "u-presales-3", displayName: "Ravi S", email: "ravi@example.com", active: true }
+const DEFAULT_USERS = [
+  {
+    userId: "u-ankit-kanwara",
+    displayName: "Ankit K",
+    email: "ankit.kanwara@gupshup.io",
+    active: true,
+    presalesRegionId: "region_in",
+    homeRegionId: "region_in"
+  }
 ];
 
 app.use(express.json({ limit: "2mb" }));
@@ -80,6 +110,10 @@ function validateRequired(record) {
 function cleanArray(value) {
   if (!Array.isArray(value)) return [];
   return value.filter((v) => isRequired(v)).map((v) => String(v));
+}
+
+function hasOwnerUser(ownerUserId, users) {
+  return users.some((u) => u.userId === ownerUserId && u.active !== false);
 }
 
 function normalizeRecord(input, nowIso) {
@@ -131,8 +165,8 @@ function enforceLeadConstraint(record, activities) {
   }
 }
 
-function applySfdcConflict(record) {
-  const user = USERS.find((u) => u.userId === record.ownerUserId);
+function applySfdcConflict(record, users) {
+  const user = users.find((u) => u.userId === record.ownerUserId);
   const ownerName = (user?.displayName || "").trim().toLowerCase();
   const sfdcName = String(record.sfdcPresalesRepName || "").trim().toLowerCase();
   if (ownerName && sfdcName && ownerName !== sfdcName) {
@@ -149,11 +183,41 @@ function upsertByFingerprint(activities, incoming) {
   return { action: "update", idx };
 }
 
+function makeUserIdFromEmail(email) {
+  const local = String(email || "")
+    .toLowerCase()
+    .split("@")[0]
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `u-${local || "user"}`;
+}
+
+function requireIngestAuth(req, res, next) {
+  if (!INGEST_API_TOKEN) return next();
+  const authHeader = String(req.headers.authorization || "");
+  if (authHeader !== `Bearer ${INGEST_API_TOKEN}`) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  return next();
+}
+
 async function initStorage() {
   if (!DATABASE_URL) {
     storageMode = "file";
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, JSON.stringify({ activities: [] }, null, 2), "utf8");
+    if (!fs.existsSync(DATA_FILE)) {
+      fs.writeFileSync(DATA_FILE, JSON.stringify({ activities: [], users: DEFAULT_USERS }, null, 2), "utf8");
+    } else {
+      try {
+        const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+        if (!Array.isArray(store.users) || !store.users.length) {
+          store.users = DEFAULT_USERS;
+          fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
+        }
+      } catch {
+        fs.writeFileSync(DATA_FILE, JSON.stringify({ activities: [], users: DEFAULT_USERS }, null, 2), "utf8");
+      }
+    }
     return;
   }
 
@@ -171,6 +235,26 @@ async function initStorage() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      user_id TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      presales_region_id TEXT,
+      home_region_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  for (const user of DEFAULT_USERS) {
+    await pool.query(
+      `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (user_id) DO NOTHING`,
+      [user.userId, user.displayName, user.email, user.active, user.presalesRegionId || null, user.homeRegionId || null]
+    );
+  }
 }
 
 async function readStore() {
@@ -186,9 +270,118 @@ async function readStore() {
   return result.rows.map((r) => r.data);
 }
 
+async function readUsers() {
+  if (storageMode === "file") {
+    try {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+      return Array.isArray(data.users) && data.users.length ? data.users : DEFAULT_USERS;
+    } catch {
+      return DEFAULT_USERS;
+    }
+  }
+  const result = await pool.query(
+    `SELECT user_id, display_name, email, active, presales_region_id, home_region_id
+     FROM users
+     ORDER BY display_name ASC`
+  );
+  return result.rows.map((r) => ({
+    userId: r.user_id,
+    displayName: r.display_name,
+    email: r.email,
+    active: r.active,
+    presalesRegionId: r.presales_region_id,
+    homeRegionId: r.home_region_id
+  }));
+}
+
+async function createUser({ displayName, email }) {
+  const cleanName = String(displayName || "").trim();
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanName || !cleanEmail) return { error: "displayName and email are required" };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return { error: "Invalid email format" };
+
+  if (storageMode === "file") {
+    const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    const users = Array.isArray(store.users) ? store.users : [];
+    if (users.some((u) => String(u.email || "").toLowerCase() === cleanEmail)) {
+      return { error: "User with this email already exists" };
+    }
+    let userId = makeUserIdFromEmail(cleanEmail);
+    let suffix = 2;
+    while (users.some((u) => u.userId === userId)) {
+      userId = `${makeUserIdFromEmail(cleanEmail)}-${suffix++}`;
+    }
+    const user = {
+      userId,
+      displayName: cleanName,
+      email: cleanEmail,
+      active: true,
+      presalesRegionId: "region_in",
+      homeRegionId: "region_in"
+    };
+    users.push(user);
+    store.users = users;
+    fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
+    return { user };
+  }
+
+  const existing = await pool.query("SELECT user_id FROM users WHERE lower(email) = lower($1) LIMIT 1", [cleanEmail]);
+  if (existing.rowCount) return { error: "User with this email already exists" };
+
+  let userId = makeUserIdFromEmail(cleanEmail);
+  let suffix = 2;
+  while ((await pool.query("SELECT user_id FROM users WHERE user_id = $1 LIMIT 1", [userId])).rowCount) {
+    userId = `${makeUserIdFromEmail(cleanEmail)}-${suffix++}`;
+  }
+  const result = await pool.query(
+    `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING user_id, display_name, email, active, presales_region_id, home_region_id`,
+    [userId, cleanName, cleanEmail, true, "region_in", "region_in"]
+  );
+  const row = result.rows[0];
+  return {
+    user: {
+      userId: row.user_id,
+      displayName: row.display_name,
+      email: row.email,
+      active: row.active,
+      presalesRegionId: row.presales_region_id,
+      homeRegionId: row.home_region_id
+    }
+  };
+}
+
+async function deleteUser(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return { error: "userId is required" };
+  if (id === "u-ankit-kanwara") return { error: "Primary test user cannot be deleted" };
+
+  if (storageMode === "file") {
+    const store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    const users = Array.isArray(store.users) ? store.users : [];
+    const before = users.length;
+    store.users = users.filter((u) => u.userId !== id);
+    if (store.users.length === before) return { error: "User not found" };
+    fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), "utf8");
+    return { deleted: true };
+  }
+
+  const result = await pool.query("DELETE FROM users WHERE user_id = $1", [id]);
+  if (!result.rowCount) return { error: "User not found" };
+  return { deleted: true };
+}
+
 async function writeStore(activities) {
   if (storageMode === "file") {
-    fs.writeFileSync(DATA_FILE, JSON.stringify({ activities }, null, 2), "utf8");
+    let users = DEFAULT_USERS;
+    try {
+      const current = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+      if (Array.isArray(current.users) && current.users.length) users = current.users;
+    } catch {
+      users = DEFAULT_USERS;
+    }
+    fs.writeFileSync(DATA_FILE, JSON.stringify({ activities, users }, null, 2), "utf8");
     return;
   }
 
@@ -217,8 +410,26 @@ app.get("/api/health", async (req, res) => {
   res.json({ status: "ok", app: "presales-impact-phase1", storageMode, activityCount: activities.length });
 });
 
-app.get("/api/config/taxonomies", (req, res) => {
-  res.json({ enums: ENUMS, taxonomies: TAXONOMIES, users: USERS });
+app.get("/api/config/taxonomies", async (req, res) => {
+  const users = await readUsers();
+  res.json({ enums: ENUMS, taxonomies: TAXONOMIES, users });
+});
+
+app.get("/api/admin/users", async (req, res) => {
+  const users = await readUsers();
+  res.json({ items: users });
+});
+
+app.post("/api/admin/users", async (req, res) => {
+  const created = await createUser(req.body || {});
+  if (created.error) return res.status(400).json({ error: created.error });
+  return res.status(201).json(created);
+});
+
+app.delete("/api/admin/users/:userId", async (req, res) => {
+  const result = await deleteUser(req.params.userId);
+  if (result.error) return res.status(400).json({ error: result.error });
+  return res.json(result);
 });
 
 app.get("/api/activities", async (req, res) => {
@@ -248,12 +459,14 @@ app.get("/api/reports/wins-losses", async (req, res) => {
 app.post("/api/activities", async (req, res) => {
   const nowIso = new Date().toISOString();
   const activities = await readStore();
+  const users = await readUsers();
   const record = normalizeRecord(req.body || {}, nowIso);
   const missing = validateRequired(record);
   if (missing.length) return res.status(400).json({ error: "Missing required fields", missing });
+  if (!hasOwnerUser(record.ownerUserId, users)) return res.status(400).json({ error: "Invalid ownerUserId" });
 
   enforceLeadConstraint(record, activities);
-  applySfdcConflict(record);
+  applySfdcConflict(record, users);
   activities.push(record);
   await writeStore(activities);
   return res.status(201).json({ item: record });
@@ -261,6 +474,7 @@ app.post("/api/activities", async (req, res) => {
 
 app.patch("/api/activities/:id", async (req, res) => {
   const activities = await readStore();
+  const users = await readUsers();
   const idx = activities.findIndex((a) => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Activity not found" });
 
@@ -268,9 +482,10 @@ app.patch("/api/activities/:id", async (req, res) => {
   const merged = normalizeRecord({ ...activities[idx], ...req.body, id: activities[idx].id, createdAt: activities[idx].createdAt }, nowIso);
   const missing = validateRequired(merged);
   if (missing.length) return res.status(400).json({ error: "Missing required fields", missing });
+  if (!hasOwnerUser(merged.ownerUserId, users)) return res.status(400).json({ error: "Invalid ownerUserId" });
 
   enforceLeadConstraint(merged, activities);
-  applySfdcConflict(merged);
+  applySfdcConflict(merged, users);
   activities[idx] = merged;
   await writeStore(activities);
   return res.json({ item: merged });
@@ -312,13 +527,14 @@ app.delete("/api/activities/:id", async (req, res) => {
   return res.json({ deleted: true, item: removed });
 });
 
-app.post("/api/superagent/ingest-batch", async (req, res) => {
+app.post("/api/superagent/ingest-batch", requireIngestAuth, async (req, res) => {
   const body = req.body || {};
   const records = Array.isArray(body.records) ? body.records : [];
   if (!records.length) return res.status(400).json({ error: "records[] is required" });
 
   const nowIso = new Date().toISOString();
   const activities = await readStore();
+  const users = await readUsers();
   let inserted = 0;
   let updated = 0;
   let conflicts = 0;
@@ -344,6 +560,10 @@ app.post("/api/superagent/ingest-batch", async (req, res) => {
       errors.push({ index: i, error: "externalFingerprint is required for ingest upsert" });
       return;
     }
+    if (!hasOwnerUser(normalized.ownerUserId, users)) {
+      errors.push({ index: i, error: "Invalid ownerUserId" });
+      return;
+    }
 
     const { action, idx } = upsertByFingerprint(activities, normalized);
     if (action === "update") {
@@ -352,7 +572,7 @@ app.post("/api/superagent/ingest-batch", async (req, res) => {
     }
 
     enforceLeadConstraint(normalized, activities);
-    applySfdcConflict(normalized);
+    applySfdcConflict(normalized, users);
     if (normalized.roleConflictReason || normalized.sfdcConflictReason) conflicts += 1;
 
     if (action === "update") {

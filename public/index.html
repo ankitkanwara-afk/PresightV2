@@ -7,76 +7,133 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <h1>PreSight2 - Presales Impact Console</h1>
-      <div class="topbar-actions">
-        <button id="prevMonthBtn" type="button" class="ghost-btn">Prev</button>
-        <label>
-          Month
-          <input id="monthFilter" type="month" />
-        </label>
-        <button id="nextMonthBtn" type="button" class="ghost-btn">Next</button>
-        <button id="resetDemoBtn" type="button" class="secondary-btn">Reset Demo Data</button>
-      </div>
-    </header>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">PreSight</div>
+        <nav class="sidebar-nav">
+          <button type="button" class="nav-item is-active" data-nav-view="dashboardView">Dashboard</button>
+          <button type="button" class="nav-item" data-nav-view="activitiesView">My Activities</button>
+          <button type="button" class="nav-item" data-nav-view="winsView">Win / Loss</button>
+          <button type="button" class="nav-item" data-nav-view="reportsView">Reports</button>
+          <button type="button" class="nav-item" data-nav-view="adminView">Admin</button>
+        </nav>
+      </aside>
 
-    <main>
-      <section id="dashboardView" class="view active-view">
-        <section class="kpi-grid dashboard-cards" id="dashboardCards"></section>
-      </section>
-
-      <section id="activitiesView" class="view hidden">
-        <div class="section-header">
-          <h2 id="listTitle">My Activities</h2>
-          <div>
-            <button id="backToDashboardFromActivities" type="button" class="ghost-btn">Back to Dashboard</button>
-            <button id="openLogModalBtn" type="button">+ Log New Activity</button>
+      <section class="workspace">
+        <header class="topbar">
+          <h1>PreSight2 - Presales Impact Console</h1>
+          <div class="topbar-actions">
+            <button id="prevMonthBtn" type="button" class="ghost-btn">&#8592;</button>
+            <div class="month-pill" id="activeMonthLabel">Month</div>
+            <button id="nextMonthBtn" type="button" class="ghost-btn">&#8594;</button>
+            <button id="resetDemoBtn" type="button" class="secondary-btn">Reset Demo Data</button>
           </div>
-        </div>
-        <div class="table-wrap">
-          <table id="activityTable">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Source</th>
-                <th>Type</th>
-                <th>Call Type</th>
-                <th>Account</th>
-                <th>Industry</th>
-                <th>Use Cases</th>
-                <th>Products</th>
-                <th>Description</th>
-                <th>Role</th>
-                <th>Commit</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
+        </header>
 
-      <section id="winsView" class="view hidden">
-        <div class="section-header">
-          <h2>SFDC Opportunities - My Wins / Losses</h2>
-          <button id="backToDashboardFromWins" type="button" class="ghost-btn">Back to Dashboard</button>
-        </div>
-        <div class="table-wrap">
-          <table id="winsTable">
-            <thead>
-              <tr>
-                <th>Opportunity</th>
-                <th>Account</th>
-                <th>Status</th>
-                <th>Presales Owner</th>
-                <th>SFDC Link</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
+        <main>
+          <section id="dashboardView" class="view active-view">
+            <section class="kpi-grid dashboard-cards" id="dashboardCards"></section>
+          </section>
+
+          <section id="activitiesView" class="view hidden">
+            <div class="section-header">
+              <h2 id="listTitle">My Activities</h2>
+              <div>
+                <button id="openLogModalBtn" type="button">+ Log New Activity</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table id="activityTable">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Source</th>
+                    <th>Type</th>
+                    <th>Call Type</th>
+                    <th>Account</th>
+                    <th>Industry</th>
+                    <th>Use Cases</th>
+                    <th>Products</th>
+                    <th>Description</th>
+                    <th>Role</th>
+                    <th>Commit</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="winsView" class="view hidden">
+            <div class="section-header">
+              <h2>SFDC Opportunities - My Wins / Losses</h2>
+            </div>
+            <div class="table-wrap">
+              <table id="winsTable">
+                <thead>
+                  <tr>
+                    <th>Opportunity</th>
+                    <th>Account</th>
+                    <th>Status</th>
+                    <th>Presales Owner</th>
+                    <th>SFDC Link</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="reportsView" class="view hidden">
+            <div class="section-header">
+              <h2>Reports View</h2>
+            </div>
+            <article class="card placeholder-card">
+              <h3>Coming Soon</h3>
+              <p>This page will host manager reporting views, monthly snapshots, and exports.</p>
+            </article>
+          </section>
+
+          <section id="adminView" class="view hidden">
+            <div class="section-header">
+              <h2>Admin View</h2>
+            </div>
+            <article class="card">
+              <h3>Add User</h3>
+              <form id="adminUserForm" class="admin-user-form">
+                <label>
+                  Full Name
+                  <input id="adminUserName" name="displayName" placeholder="Ankit Kanwara" required />
+                </label>
+                <label>
+                  Email
+                  <input id="adminUserEmail" name="email" type="email" placeholder="firstname.lastname@gupshup.io" required />
+                </label>
+                <button type="submit">Add User</button>
+              </form>
+              <p id="adminUserMessage" class="text-muted"></p>
+            </article>
+            <article class="card">
+              <h3>Users</h3>
+              <div class="table-wrap">
+                <table id="adminUsersTable">
+                  <thead>
+                    <tr>
+                      <th>User ID</th>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Active</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </main>
       </section>
-    </main>
+    </div>
 
     <div id="logModalBackdrop" class="modal-backdrop hidden">
       <section class="modal">

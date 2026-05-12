@@ -1,6 +1,12 @@
-const currentMonth = new Date().toISOString().slice(0, 7);
-const monthDate = (d) => `${currentMonth}-${String(d).padStart(2, "0")}`;
-const currentUserId = "u-presales-1";
+function toLocalMonth(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function toLocalDate(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const currentMonth = "2026-05";
+const currentUserId = "u-ankit-kanwara";
 
 const ACTIVITY_TYPES = [
   ["at_customer_call", "Customer Call"],
@@ -51,15 +57,11 @@ const PRODUCTS = [
   ["prd_other", "Other"]
 ];
 
-const labelMap = Object.fromEntries([...ACTIVITY_TYPES, ...CALL_TYPES, ...INDUSTRIES, ...USE_CASES, ...CHANNELS, ...PRODUCTS]);
+let labelMap = Object.fromEntries([...ACTIVITY_TYPES, ...CALL_TYPES, ...INDUSTRIES, ...USE_CASES, ...CHANNELS, ...PRODUCTS]);
 
 const seed = {
-  version: 11,
-  users: [
-    { id: "u-presales-1", name: "Ankit K", role: "presales" },
-    { id: "u-presales-2", name: "Yashah S", role: "presales" },
-    { id: "u-presales-3", name: "Ravi S", role: "presales" }
-  ],
+  version: 12,
+  users: [{ id: "u-ankit-kanwara", name: "Ankit K", email: "ankit.kanwara@gupshup.io", role: "presales", active: true, presalesRegionId: "region_in" }],
   defaults: {
     category: "external",
     activityTypeId: "at_customer_call",
@@ -67,212 +69,21 @@ const seed = {
     sourceType: "superagent",
     commitStatus: "not_committed"
   },
-  activities: [
-    {
-      id: crypto.randomUUID(),
-      meetingKey: "evt-acme-2026-05-02",
-      date: monthDate(2),
-      ownerUserId: "u-presales-1",
-      sourceType: "superagent",
-      category: "external",
-      activityTypeId: "at_customer_call",
-      callTypeId: "ct_demo",
-      joinedCall: "yes",
-      participationRole: "lead",
-      coParticipants: ["u-presales-2"],
-      accountName: "Acme Corp",
-      industryId: "ind_bfsi",
-      useCaseIds: ["uc_support_automation", "uc_sales_assist"],
-      channelIds: ["ch_voice", "ch_web_chat"],
-      productIds: ["prd_ai_agents", "prd_voice_ai"],
-      valueDerived: "Customer aligned on pilot scope and architecture direction.",
-      evidenceAvailable: "yes",
-      linkedSourceCount: 3,
-      summary: "Discussed support workflow and aligned next evaluation step.",
-      nextSteps: "Share solution summary by Friday.",
-      sfdcOpportunityId: "OPP-10021",
-      sfdcOpportunityLink: "https://example.com/opp/10021",
-      sfdcPresalesRepName: "Ankit K",
-      crmLinkStatus: "opportunity_linked",
-      dealOutcome: "win",
-      sowLinked: false,
-      tagInternalToAccount: false,
-      commitStatus: "committed",
-      recordStatus: "active"
-    },
-    {
-      id: crypto.randomUUID(),
-      meetingKey: "evt-zen-2026-05-08",
-      date: monthDate(8),
-      ownerUserId: "u-presales-1",
-      sourceType: "superagent",
-      category: "external",
-      activityTypeId: "at_customer_call",
-      callTypeId: "ct_discovery",
-      joinedCall: "yes",
-      participationRole: "lead",
-      coParticipants: [],
-      accountName: "Zenline Telecom",
-      industryId: "ind_telecom",
-      useCaseIds: ["uc_marketing_engagement"],
-      channelIds: ["ch_whatsapp", "ch_voice"],
-      productIds: ["prd_campaign_manager"],
-      valueDerived: "Budget and use-case fit validated.",
-      evidenceAvailable: "yes",
-      linkedSourceCount: 2,
-      summary: "Discovery call mapped phased launch and target metrics.",
-      nextSteps: "Send solution blueprint.",
-      sfdcOpportunityId: "OPP-10200",
-      sfdcOpportunityLink: "https://example.com/opp/10200",
-      sfdcPresalesRepName: "Ankit K",
-      crmLinkStatus: "opportunity_linked",
-      dealOutcome: "open",
-      sowLinked: false,
-      tagInternalToAccount: false,
-      commitStatus: "not_committed",
-      recordStatus: "active"
-    },
-    {
-      id: crypto.randomUUID(),
-      meetingKey: "evt-everon-2026-05-12",
-      date: monthDate(12),
-      ownerUserId: "u-presales-1",
-      sourceType: "manual",
-      category: "external",
-      activityTypeId: "at_sow",
-      callTypeId: "",
-      joinedCall: "yes",
-      participationRole: "lead",
-      coParticipants: ["u-presales-3"],
-      accountName: "Everon Fintech",
-      industryId: "ind_bfsi",
-      useCaseIds: ["uc_customer_service"],
-      channelIds: ["ch_web_chat"],
-      productIds: ["prd_journey_builder"],
-      valueDerived: "SOW scope finalized for legal review.",
-      evidenceAvailable: "yes",
-      linkedSourceCount: 1,
-      summary: "Manual update for SOW workshop conducted onsite.",
-      nextSteps: "Submit final draft to procurement.",
-      sfdcOpportunityId: "OPP-10301",
-      sfdcOpportunityLink: "https://example.com/opp/10301",
-      sfdcPresalesRepName: "Ankit K",
-      crmLinkStatus: "opportunity_linked",
-      dealOutcome: "open",
-      sowLinked: true,
-      tagInternalToAccount: false,
-      commitStatus: "committed",
-      recordStatus: "active"
-    },
-    {
-      id: crypto.randomUUID(),
-      meetingKey: "evt-bluecart-2026-05-19",
-      date: monthDate(19),
-      ownerUserId: "u-presales-1",
-      sourceType: "manual",
-      category: "external",
-      activityTypeId: "at_rfx",
-      callTypeId: "",
-      joinedCall: "yes",
-      participationRole: "contributor",
-      coParticipants: ["u-presales-2"],
-      accountName: "BlueCart Commerce",
-      industryId: "ind_retail_ecom",
-      useCaseIds: ["uc_commerce_conversational"],
-      channelIds: ["ch_web_chat"],
-      productIds: ["prd_agent_assist"],
-      valueDerived: "RFx response aligned with ROI asks.",
-      evidenceAvailable: "no",
-      linkedSourceCount: 0,
-      summary: "RFx follow-up logged manually after moved meeting.",
-      nextSteps: "Reconfirm if meeting happened this week.",
-      sfdcOpportunityId: "",
-      sfdcOpportunityLink: "",
-      sfdcPresalesRepName: "",
-      crmLinkStatus: "account_matched_no_opp",
-      dealOutcome: "loss",
-      sowLinked: false,
-      tagInternalToAccount: false,
-      commitStatus: "not_committed",
-      recordStatus: "active"
-    },
-    {
-      id: crypto.randomUUID(),
-      meetingKey: "evt-pricing-2026-05-22",
-      date: monthDate(22),
-      ownerUserId: "u-presales-1",
-      sourceType: "superagent",
-      category: "external",
-      activityTypeId: "at_pricing",
-      callTypeId: "",
-      joinedCall: "yes",
-      participationRole: "lead",
-      coParticipants: [],
-      accountName: "Metro Bank",
-      industryId: "ind_bfsi",
-      useCaseIds: ["uc_sales_assist"],
-      channelIds: ["ch_email"],
-      productIds: ["prd_ai_agents"],
-      valueDerived: "Pricing assumptions confirmed.",
-      evidenceAvailable: "yes",
-      linkedSourceCount: 1,
-      summary: "Commercial pricing workshop with finance and buyer team.",
-      nextSteps: "Share final quote sheet.",
-      sfdcOpportunityId: "OPP-10422",
-      sfdcOpportunityLink: "https://example.com/opp/10422",
-      sfdcPresalesRepName: "Ankit K",
-      crmLinkStatus: "opportunity_linked",
-      dealOutcome: "open",
-      sowLinked: false,
-      tagInternalToAccount: false,
-      commitStatus: "committed",
-      recordStatus: "active"
-    },
-    {
-      id: crypto.randomUUID(),
-      meetingKey: "evt-int-2026-05-25",
-      date: monthDate(25),
-      ownerUserId: "u-presales-1",
-      sourceType: "manual",
-      category: "internal",
-      activityTypeId: "at_other",
-      callTypeId: "",
-      joinedCall: "yes",
-      participationRole: "lead",
-      coParticipants: ["u-presales-2"],
-      accountName: "Everon Fintech",
-      industryId: "ind_bfsi",
-      useCaseIds: ["uc_internal_enablement"],
-      channelIds: ["ch_web_chat"],
-      productIds: ["prd_ai_agents"],
-      valueDerived: "Internal prep improved quality of external call plan.",
-      evidenceAvailable: "yes",
-      linkedSourceCount: 1,
-      summary: "Internal strategy discussion tied to account approach.",
-      nextSteps: "Finalize account battlecard.",
-      sfdcOpportunityId: "",
-      sfdcOpportunityLink: "",
-      sfdcPresalesRepName: "",
-      crmLinkStatus: "no_account",
-      dealOutcome: "open",
-      sowLinked: false,
-      tagInternalToAccount: true,
-      commitStatus: "not_committed",
-      recordStatus: "active"
-    }
-  ]
+  activities: []
 };
 
 let state = loadState();
 let editingActivityId = null;
 let activityViewMode = "all";
+let activeMonth = currentMonth;
+const API_BASE = "";
 
 function loadState() {
   const raw = localStorage.getItem("phase1-presales-impact");
   if (!raw) return structuredClone(seed);
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed.version || parsed.version < 11) return structuredClone(seed);
+    if (!parsed.version || parsed.version < 12) return structuredClone(seed);
     return parsed;
   } catch {
     return structuredClone(seed);
@@ -285,10 +96,20 @@ function monthKey(d) {
   return (d || "").slice(0, 7);
 }
 function selectedMonth() {
-  return document.getElementById("monthFilter").value || currentMonth;
+  return activeMonth;
 }
 function userName(id) {
   return state.users.find((u) => u.id === id)?.name || id;
+}
+function normalizeUsers(list) {
+  return (Array.isArray(list) ? list : []).map((u) => ({
+    id: u.id || u.userId,
+    name: u.name || u.displayName,
+    email: u.email || "",
+    active: u.active !== false,
+    presalesRegionId: u.presalesRegionId || "",
+    homeRegionId: u.homeRegionId || ""
+  }));
 }
 function monthActivities() {
   return state.activities
@@ -329,16 +150,22 @@ function uniqueClientMeetings(list) {
   return new Set(list.filter(isClientMeeting).map((a) => a.meetingKey)).size;
 }
 function winsLosses(list) {
+  // Fallback local calculation if API fails
   const wins = countWhere(list, (a) => a.crmLinkStatus === "opportunity_linked" && a.dealOutcome === "win");
   const losses = countWhere(list, (a) => a.dealOutcome === "loss");
   const total = wins + losses;
   return { wins, losses, rate: total ? `${Math.round((wins / total) * 100)}%` : "0%" };
 }
 
+let apiReportData = null;
+
 function setView(viewId) {
-  ["dashboardView", "activitiesView", "winsView"].forEach((id) => {
+  ["dashboardView", "activitiesView", "winsView", "reportsView", "adminView"].forEach((id) => {
     document.getElementById(id).classList.toggle("hidden", id !== viewId);
     document.getElementById(id).classList.toggle("active-view", id === viewId);
+  });
+  document.querySelectorAll(".nav-item[data-nav-view]").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.navView === viewId);
   });
 }
 
@@ -384,8 +211,8 @@ function renderDashboardCards() {
     {
       id: "wins",
       title: "SFDC Wins & Losses",
-      value: `${wl.wins} Win and ${wl.losses} Loss`,
-      note: `Win rate ${wl.rate}`,
+      value: apiReportData ? `${apiReportData.wins} Win and ${apiReportData.losses} Loss` : `${wl.wins} Win and ${wl.losses} Loss`,
+      note: apiReportData ? `Win rate ${apiReportData.winRate}%` : `Win rate ${wl.rate}`,
       target: "winsView"
     },
     {
@@ -395,6 +222,20 @@ function renderDashboardCards() {
       note: "Open logged activity page",
       target: "activitiesView",
       mode: "all"
+    },
+    {
+      id: "reports",
+      title: "Report View",
+      value: "Open",
+      note: "Manager reporting workbench",
+      target: "reportsView"
+    },
+    {
+      id: "admin",
+      title: "Admin",
+      value: "Open",
+      note: "Users and configuration",
+      target: "adminView"
     }
   ];
 
@@ -464,6 +305,26 @@ function renderWinsTable() {
     .join("");
 }
 
+function renderAdminUsersTable() {
+  const tbody = document.querySelector("#adminUsersTable tbody");
+  if (!tbody) return;
+  const rows = (state.users || []).slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="4">No users found.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows
+    .map(
+      (u) => `<tr>
+      <td>${u.id}</td>
+      <td>${u.name || "-"}</td>
+      <td>${u.email || "-"}</td>
+      <td>${u.active ? "Yes" : "No"}</td>
+    </tr>`
+    )
+    .join("");
+}
+
 function enforceLeadRule(payload) {
   if (payload.participationRole !== "lead") return;
   const existingLead = state.activities.find(
@@ -479,7 +340,7 @@ function applyDefaults(form) {
   Object.entries(state.defaults).forEach(([k, v]) => {
     if (form.elements[k]) form.elements[k].value = v;
   });
-  form.elements.date.value = new Date().toISOString().slice(0, 10);
+  form.elements.date.value = toLocalDate();
   form.elements.ownerUserId.value = currentUserId;
   form.elements.meetingKey.value = "";
   form.elements.summary.value = "";
@@ -548,20 +409,53 @@ function setModalMode(edit) {
 }
 
 function shiftMonth(direction) {
-  const monthInput = document.getElementById("monthFilter");
-  const [yy, mm] = (monthInput.value || currentMonth).split("-").map(Number);
+  const [yy, mm] = (activeMonth || currentMonth).split("-").map(Number);
   const dt = new Date(yy, mm - 1 + direction, 1);
-  monthInput.value = dt.toISOString().slice(0, 7);
-  refresh();
+  activeMonth = toLocalMonth(dt);
+  refresh().catch(console.error);
 }
 
-function refresh() {
+function monthTitle(monthStr) {
+  const [yy, mm] = monthStr.split("-").map(Number);
+  return new Date(yy, mm - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+async function refresh() {
   const month = selectedMonth();
   const modeLabel = activityViewMode === "pending" ? "Pending Commit" : "All";
   document.getElementById("listTitle").textContent = `My Activities - ${month} (${modeLabel})`;
+  document.getElementById("activeMonthLabel").textContent = monthTitle(month);
+
+  console.log(`Refreshing UI for month=${month}, user=${currentUserId}`);
+
+  try {
+    // 1. Fetch Activities
+    const actRes = await fetch(`${API_BASE}/api/activities?month=${month}&ownerUserId=${currentUserId}`);
+    const actData = await actRes.json();
+    console.log("Activities API Response:", actData);
+    
+    if (actData && Array.isArray(actData.items)) {
+      state.activities = actData.items;
+      // We don't necessarily want to persist API data to localStorage as the primary source,
+      // but the app's current logic relies on state.activities.
+    } else {
+      console.warn("Activities API returned unexpected shape or no items.");
+    }
+
+    // 2. Fetch Reports
+    const repRes = await fetch(`${API_BASE}/api/reports/wins-losses?month=${month}&ownerUserId=${currentUserId}`);
+    const repData = await repRes.json();
+    console.log("Reports API Response:", repData);
+    apiReportData = repData;
+
+  } catch (err) {
+    console.error("Failed to fetch data from API:", err);
+  }
+
   renderDashboardCards();
   renderActivitiesTable();
   renderWinsTable();
+  renderAdminUsersTable();
 }
 
 function setup() {
@@ -579,17 +473,16 @@ function setup() {
     .map((u) => `<option value="${u.id}">${u.name}</option>`)
     .join("");
 
-  document.getElementById("monthFilter").value = currentMonth;
-  document.getElementById("monthFilter").addEventListener("change", refresh);
   document.getElementById("prevMonthBtn").addEventListener("click", () => shiftMonth(-1));
   document.getElementById("nextMonthBtn").addEventListener("click", () => shiftMonth(1));
-
-  document.getElementById("backToDashboardFromActivities").addEventListener("click", () => {
-    activityViewMode = "all";
-    setView("dashboardView");
-    refresh();
+  document.querySelectorAll(".nav-item[data-nav-view]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const nextView = btn.dataset.navView;
+      if (nextView === "activitiesView") activityViewMode = "all";
+      setView(nextView);
+      refresh().catch(console.error);
+    });
   });
-  document.getElementById("backToDashboardFromWins").addEventListener("click", () => setView("dashboardView"));
 
   document.addEventListener("click", (e) => {
     const navCard = e.target.closest(".dashboard-card[data-target]");
@@ -615,24 +508,29 @@ function setup() {
       return;
     }
     if (action === "commit") {
-      row.commitStatus = row.commitStatus === "committed" ? "not_committed" : "committed";
-      persist();
-      refresh();
+      const newStatus = row.commitStatus === "committed" ? "not_committed" : "committed";
+      fetch(`${API_BASE}/api/activities/${id}/commit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commitStatus: newStatus })
+      })
+        .then(() => refresh())
+        .catch(console.error);
       return;
     }
     if (action === "reject") {
       if (window.confirm("Reject this record? It will be archived from active view.")) {
-        row.recordStatus = "archived";
-        persist();
-        refresh();
+        fetch(`${API_BASE}/api/activities/${id}/reject`, { method: "POST" })
+          .then(() => refresh())
+          .catch(console.error);
       }
       return;
     }
     if (action === "delete") {
       if (window.confirm("Delete this record permanently?")) {
-        state.activities = state.activities.filter((a) => a.id !== id);
-        persist();
-        refresh();
+        fetch(`${API_BASE}/api/activities/${id}`, { method: "DELETE" })
+          .then(() => refresh())
+          .catch(console.error);
       }
     }
   });
@@ -653,6 +551,39 @@ function setup() {
     state = structuredClone(seed);
     persist();
     location.reload();
+  });
+
+  const adminUserForm = document.getElementById("adminUserForm");
+  const adminUserMessage = document.getElementById("adminUserMessage");
+  adminUserForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    adminUserMessage.textContent = "";
+    const payload = {
+      displayName: document.getElementById("adminUserName").value.trim(),
+      email: document.getElementById("adminUserEmail").value.trim().toLowerCase()
+    };
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        adminUserMessage.textContent = data.error || "Failed to add user.";
+        return;
+      }
+      const normalized = normalizeUsers([data.user])[0];
+      if (!state.users.some((u) => u.id === normalized.id)) {
+        state.users.push(normalized);
+        persist();
+      }
+      adminUserForm.reset();
+      adminUserMessage.textContent = `Added user ${normalized.name} (${normalized.email}).`;
+      refresh();
+    } catch {
+      adminUserMessage.textContent = "Network error while adding user.";
+    }
   });
 
   form.addEventListener("submit", (e) => {
@@ -692,24 +623,65 @@ function setup() {
     };
     enforceLeadRule(payload);
     const idx = state.activities.findIndex((a) => a.id === payload.id);
-    if (idx >= 0) state.activities[idx] = payload;
-    else state.activities.push(payload);
-    state.defaults = {
-      category: payload.category,
-      activityTypeId: payload.activityTypeId,
-      callTypeId: payload.callTypeId,
-      sourceType: payload.sourceType,
-      commitStatus: payload.commitStatus
-    };
-    editingActivityId = null;
-    persist();
-    closeModal();
-    refresh();
-    setView("activitiesView");
+    const method = idx >= 0 ? "PATCH" : "POST";
+    const url = idx >= 0 ? `${API_BASE}/api/activities/${payload.id}` : `${API_BASE}/api/activities`;
+
+    fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then((r) => r.json())
+      .then(() => {
+        state.defaults = {
+          category: payload.category,
+          activityTypeId: payload.activityTypeId,
+          callTypeId: payload.callTypeId,
+          sourceType: payload.sourceType,
+          commitStatus: payload.commitStatus
+        };
+        editingActivityId = null;
+        closeModal();
+        refresh().catch(console.error);
+        setView("activitiesView");
+      })
+      .catch(console.error);
   });
 
   applyDefaults(form);
-  refresh();
+  fetch(`${API_BASE}/api/config/taxonomies`)
+    .then((r) => r.json())
+    .then((cfg) => {
+      // 1. Update labelMap from fetched taxonomies
+      if (cfg?.taxonomies) {
+        const tx = cfg.taxonomies;
+        const allItems = [
+          ...(tx.activityTypes || []),
+          ...(tx.callTypes || []),
+          ...(tx.industries || []),
+          ...(tx.useCases || []),
+          ...(tx.channels || []),
+          ...(tx.products || [])
+        ];
+        allItems.forEach((item) => {
+          labelMap[item.id] = item.label;
+        });
+      }
+
+      // 2. Update users
+      const liveUsers = normalizeUsers(cfg?.users);
+      if (liveUsers.length) {
+        state.users = liveUsers;
+        persist();
+        document.getElementById("currentUserLabel").textContent = userName(currentUserId);
+        form.elements.coParticipants.innerHTML = state.users
+          .filter((u) => u.id !== currentUserId)
+          .map((u) => `<option value="${u.id}">${u.name}</option>`)
+          .join("");
+      }
+      refresh().catch(console.error);
+    })
+    .catch(() => refresh().catch(console.error));
   setView("dashboardView");
 }
 
