@@ -137,6 +137,7 @@ function normalizeRecord(input, nowIso) {
   record.dealOutcome = record.dealOutcome || "open";
   record.sowLinked = Boolean(record.sowLinked);
   record.tagInternalToAccount = Boolean(record.tagInternalToAccount);
+  record.customerEmailsSent = Number(record.customerEmailsSent || 0);
   record.commitStatus = record.commitStatus || "not_committed";
   record.recordStatus = record.recordStatus || "active";
   record.externalFingerprint = String(record.externalFingerprint || "");
@@ -451,9 +452,10 @@ app.get("/api/reports/wins-losses", async (req, res) => {
 
   const wins = list.filter((a) => a.crmLinkStatus === "opportunity_linked" && a.dealOutcome === "win").length;
   const losses = list.filter((a) => a.dealOutcome === "loss").length;
+  const totalEmailsSent = list.reduce((sum, a) => sum + (a.customerEmailsSent || 0), 0);
   const total = wins + losses;
   const winRate = total ? Number(((wins / total) * 100).toFixed(2)) : 0;
-  res.json({ wins, losses, winRate });
+  res.json({ wins, losses, winRate, totalEmailsSent });
 });
 
 app.post("/api/activities", async (req, res) => {
@@ -489,6 +491,31 @@ app.patch("/api/activities/:id", async (req, res) => {
   activities[idx] = merged;
   await writeStore(activities);
   return res.json({ item: merged });
+});
+
+app.patch("/api/activities/bulk-commit", async (req, res) => {
+  const { month, ownerUserId } = req.body || {};
+  if (!month || !ownerUserId) return res.status(400).json({ error: "month and ownerUserId are required" });
+
+  const activities = await readStore();
+  let count = 0;
+  const nowIso = new Date().toISOString();
+
+  activities.forEach((a) => {
+    if (
+      a.ownerUserId === ownerUserId &&
+      String(a.date || "").startsWith(month) &&
+      a.recordStatus !== "archived" &&
+      a.commitStatus !== "committed"
+    ) {
+      a.commitStatus = "committed";
+      a.updatedAt = nowIso;
+      count += 1;
+    }
+  });
+
+  if (count > 0) await writeStore(activities);
+  res.json({ success: true, count });
 });
 
 app.patch("/api/activities/:id/commit", async (req, res) => {

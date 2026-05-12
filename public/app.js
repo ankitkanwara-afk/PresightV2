@@ -209,6 +209,13 @@ function renderDashboardCards() {
       mode: "all"
     },
     {
+      id: "emails",
+      title: "Customer Emails Sent",
+      value: apiReportData?.totalEmailsSent || 0,
+      note: "Total emails logged by SuperAgent",
+      target: "dashboardView"
+    },
+    {
       id: "wins",
       title: "SFDC Wins & Losses",
       value: apiReportData ? `${apiReportData.wins} Win and ${apiReportData.losses} Loss` : `${wl.wins} Win and ${wl.losses} Loss`,
@@ -250,33 +257,35 @@ function renderDashboardCards() {
     .join("");
 }
 
-function renderActivitiesTable() {
-  const rows = activitiesForCurrentView().sort((a, b) => (a.date < b.date ? 1 : -1));
-  const tbody = document.querySelector("#activityTable tbody");
+function renderActivitiesTables() {
+  const all = monthActivities().sort((a, b) => (a.date < b.date ? 1 : -1));
+  const pending = all.filter((a) => a.commitStatus !== "committed");
+  const committed = all.filter((a) => a.commitStatus === "committed");
+
+  renderTableRows("#pendingActivityTable tbody", pending, "pending");
+  renderTableRows("#committedActivityTable tbody", committed, "committed");
+}
+
+function renderTableRows(selector, rows, mode) {
+  const tbody = document.querySelector(selector);
+  if (!tbody) return;
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="12">No records for selected month.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7">No ${mode} records for this month.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows
     .map((a) => {
-      const role = a.coParticipants?.length ? `${a.participationRole} + ${a.coParticipants.map(userName).join(", ")}` : a.participationRole;
       return `<tr>
         <td>${a.date}</td>
         <td><span class="chip ${a.sourceType === "superagent" ? "ok" : "warn"}">${a.sourceType}</span></td>
         <td>${labelMap[a.activityTypeId] || "-"}</td>
-        <td>${labelMap[a.callTypeId] || "-"}</td>
         <td>${a.accountName || "-"}</td>
-        <td>${labelMap[a.industryId] || "-"}</td>
-        <td>${(a.useCaseIds || []).map((x) => labelMap[x]).filter(Boolean).join(", ") || "-"}</td>
-        <td>${(a.productIds || []).map((x) => labelMap[x]).filter(Boolean).join(", ") || "-"}</td>
         <td class="description-cell">${a.summary || "-"}</td>
-        <td>${role || "-"}</td>
-        <td><span class="chip ${chipClass(a.commitStatus)}">${a.commitStatus}</span></td>
+        <td>${a.customerEmailsSent || 0}</td>
         <td>
           <button class="tiny-btn" data-action="edit" data-id="${a.id}" type="button">Edit</button>
           <button class="tiny-btn" data-action="commit" data-id="${a.id}" type="button">${a.commitStatus === "committed" ? "Uncommit" : "Commit"}</button>
           <button class="tiny-btn secondary-btn" data-action="reject" data-id="${a.id}" type="button">Reject</button>
-          <button class="tiny-btn danger-btn" data-action="delete" data-id="${a.id}" type="button">Delete</button>
         </td>
       </tr>`;
     })
@@ -358,6 +367,7 @@ function applyDefaults(form) {
   form.elements.crmLinkStatus.value = "no_account";
   form.elements.dealOutcome.value = "open";
   form.elements.sowLinked.value = "false";
+  form.elements.customerEmailsSent.value = "0";
   form.elements.tagInternalToAccount.checked = false;
   setMulti(form.elements.coParticipants, []);
   setMulti(form.elements.useCaseIds, []);
@@ -393,6 +403,7 @@ function populateForm(a) {
   form.elements.crmLinkStatus.value = a.crmLinkStatus || "no_account";
   form.elements.dealOutcome.value = a.dealOutcome || "open";
   form.elements.sowLinked.value = a.sowLinked ? "true" : "false";
+  form.elements.customerEmailsSent.value = String(a.customerEmailsSent || 0);
   form.elements.tagInternalToAccount.checked = Boolean(a.tagInternalToAccount);
   form.elements.commitStatus.value = a.commitStatus || "not_committed";
 }
@@ -425,7 +436,7 @@ async function refresh() {
   const modeLabel = activityViewMode === "pending" ? "Pending Commit" : "All";
   document.getElementById("listTitle").textContent = `My Activities - ${month} (${modeLabel})`;
   document.getElementById("activeMonthLabel").textContent = monthTitle(month);
-
+  
   console.log(`Refreshing UI for month=${month}, user=${currentUserId}`);
 
   try {
@@ -436,8 +447,6 @@ async function refresh() {
     
     if (actData && Array.isArray(actData.items)) {
       state.activities = actData.items;
-      // We don't necessarily want to persist API data to localStorage as the primary source,
-      // but the app's current logic relies on state.activities.
     } else {
       console.warn("Activities API returned unexpected shape or no items.");
     }
@@ -453,7 +462,7 @@ async function refresh() {
   }
 
   renderDashboardCards();
-  renderActivitiesTable();
+  renderActivitiesTables();
   renderWinsTable();
   renderAdminUsersTable();
 }
@@ -532,6 +541,18 @@ function setup() {
           .then(() => refresh())
           .catch(console.error);
       }
+    }
+  });
+
+  document.getElementById("bulkCommitBtn").addEventListener("click", () => {
+    if (window.confirm("Commit all pending activities for this month?")) {
+      fetch(`${API_BASE}/api/activities/bulk-commit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: selectedMonth(), ownerUserId: currentUserId })
+      })
+        .then(() => refresh())
+        .catch(console.error);
     }
   });
 
@@ -617,6 +638,7 @@ function setup() {
       crmLinkStatus: data.get("crmLinkStatus"),
       dealOutcome: data.get("dealOutcome"),
       sowLinked: data.get("sowLinked") === "true",
+      customerEmailsSent: Number(data.get("customerEmailsSent") || 0),
       tagInternalToAccount: form.elements.tagInternalToAccount.checked,
       commitStatus: data.get("commitStatus"),
       recordStatus: "active"

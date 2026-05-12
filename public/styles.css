@@ -170,6 +170,31 @@ main {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  margin-bottom: 8px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.activity-section {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-section h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  border-left: 4px solid var(--brand-a);
+  padding-left: 8px;
+}
+
+.committed-section {
+  margin-top: 24px;
+  opacity: 0.9;
 }
 
 .card {
@@ -314,6 +339,9 @@ button {
 button {
   border: 0;
   cursor: pointer;
+  background: var(--brand-a);
+  color: #fff;
+  font-weight: 600;
 }
 
 .secondary-btn {

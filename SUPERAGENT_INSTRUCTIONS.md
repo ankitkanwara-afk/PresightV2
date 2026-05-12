@@ -48,6 +48,7 @@ Important optional fields:
 - `sowLinked`, `sowLink`
 - `presalesRegionId`, `salesRegionId`
 - `reviewStatus`
+- `customerEmailsSent` (Number - used for tracking volume of outbound reach)
 
 ## Ingestion Guidance
 App is not orchestration engine in MVP.
