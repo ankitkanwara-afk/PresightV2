@@ -283,9 +283,9 @@ async function initStorage() {
          email = EXCLUDED.email`,
       [user.userId, user.displayName, user.email, user.active, user.presalesRegionId || null, user.homeRegionId || null]
     );
-    // Ensure default password and reset flag exist in JSONB
+    // Force sync of critical fields to 'data' JSONB for default users
     await pool.query(
-      "UPDATE users SET data = data || $1::jsonb WHERE user_id = $2 AND (data->>'passwordHash' IS NULL OR data->>'passwordHash' = '')",
+      "UPDATE users SET data = COALESCE(data, '{}'::jsonb) || $1::jsonb WHERE user_id = $2",
       [JSON.stringify({ passwordHash: user.passwordHash, needsPasswordReset: user.needsPasswordReset }), user.userId]
     );
   }
