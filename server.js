@@ -255,6 +255,7 @@ async function initStorage() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  for (const user of DEFAULT_USERS) {
     await pool.query(
       `INSERT INTO users (user_id, display_name, email, active, presales_region_id, home_region_id)
        VALUES ($1, $2, $3, $4, $5, $6)
